@@ -1,0 +1,241 @@
+#import some libraries
+import numpy as np
+import tensorflow as tf
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+import os
+
+# load the dataset
+num_classes = 10
+new_im_size = 32
+channels = 3
+cifar10 = tf.keras.datasets.cifar10
+# TODO: load the dataset
+(x_train_full, y_train_full), (x_test, y_test) = cifar10.load_data()
+
+# TODO: print the target image values.
+print("Target image values:\n", y_train_full)
+print("Target image values:\n", y_test)
+
+
+# TODO: Normalize the data in [0 1]
+x_train_full = x_train_full / 255
+x_test = x_test / 255
+
+# TODO: Split the training dataset into training and validation subsets, the validation size is 25%.
+x_train, x_val , y_train, y_val = train_test_split(x_train_full, y_train_full, test_size= 0.25, random_state=42)
+
+# Standardizing the data
+def standardize_dataset(X):
+    image_means = []
+    image_stds = []
+
+    for image in X:
+        image_means.append(np.mean(image)) # Computing the image mean
+        image_stds.append(np.std(image)) # Computing the image standard deviation
+
+    dataset_mean = np.mean(image_means) # Computing the dataset mean
+    dataset_std = np.mean(image_stds) # Computing the dataset standard deviation
+    return (X - dataset_mean) / dataset_std # For every image we subtract to it the dataset mean and we divide by the dataset standard deviation
+
+# TODO: Standardize the datasets using the above declared method.
+x_train = standardize_dataset(x_train)
+x_val = standardize_dataset(x_val)
+x_test = standardize_dataset(x_test)
+
+# One hot encoding: A one hot encoding is a representation of categorical variables as binary vectors.
+# It allow the model to process and learn from this information and improve the resulting accuracy
+# TODO: Apply one hot encoder for the target values
+# use the following method tf.keras.utils.to_categorical
+y_train = tf.keras.utils.to_categorical(y_train, num_classes)
+y_val = tf.keras.utils.to_categorical(y_val, num_classes)
+y_test = tf.keras.utils.to_categorical(y_test, num_classes)
+
+# TODO: print the size of training, validation, and test subsets
+print("Training set size:", x_train.shape, y_train.shape)
+print("Validation set size:", x_val.shape, y_val.shape)
+print("Test set size:", x_test.shape, y_test.shape)
+
+
+# Creating the model from scratch
+import tensorflow.keras
+from tensorflow.keras import Sequential,Input,Model
+from tensorflow.keras.layers import Dense, Dropout, Flatten
+from tensorflow.keras.layers import Conv2D, MaxPooling2D
+from tensorflow.keras.layers import BatchNormalization
+from tensorflow.keras.layers import ReLU
+from sklearn.metrics import accuracy_score
+
+# TODO: Build here your model.
+# TODO: Try to use one convolution layer, with 128 kernels of size 3x3, joint with ReLU, MaxPooling, and Dropout layers
+model = Sequential([
+    Conv2D(128, (3, 3), padding='same', input_shape=(32, 32, 3)),  # Input shape for CIFAR-10 images
+    BatchNormalization(),
+    ReLU(),
+    MaxPooling2D((2, 2)),  # Max pooling layer with 2x2 pool size
+    Dropout(0.2),  # Dropout to reduce overfitting
+
+# TODO: ADD FURTHER CONV LAYERS HERE LATER
+Conv2D(128, (3, 3), padding='same'),
+    BatchNormalization(),
+    ReLU(),
+    MaxPooling2D((2, 2)),
+    Dropout(0.2),
+
+Conv2D(128, (3, 3), padding='same'),
+    BatchNormalization(),
+    ReLU(),
+    MaxPooling2D((2, 2)),
+    Dropout(0.2),
+
+# TODO: Add the fully connected (dense) final part: Flatten + Dense with 32 neurons (<-- CHANGE THIS!!) and relu + Dropout 25% + Dense with 10 neurons and softmax
+# Flatten the feature maps into a 1D vector
+    Flatten(),
+
+    # Fully connected layers (Dense layers) with ReLU activation
+    Dense(128, activation='relu'),
+    Dropout(0.2),  # Dropout to reduce overfitting
+
+    # Final dense layer for classification (num_classes outputs with softmax activation)
+    Dense(num_classes, activation='softmax')
+])
+
+
+# TODO: Compile the model with the Adam optimizer
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Print the model summary to see the structure
+model.summary()
+
+# TODO: Train the model
+# Network parameters (Try different values)
+batch_size = 128 # Setting the batch size
+epochs = 20 # Setting the number of epochs
+history = model.fit(x_train, y_train,
+                    batch_size=batch_size,
+                    epochs=epochs,
+                    validation_data=(x_val, y_val))
+
+# TODO: Evaluate and print the accuracy of the model on the test dataset
+test_loss, test_accuracy = model.evaluate(x_test, y_test, verbose=2)
+print(f"Test accuracy: {test_accuracy * 100:.2f}%")
+
+# Plot the training and validation accuracy and loss
+plt.figure(figsize=(12, 4))
+
+# Plot training & validation accuracy values
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Val Accuracy')
+plt.title('Model Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend(loc='lower right')
+
+# Plot training & validation loss values
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Val Loss')
+plt.title('Model Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend(loc='upper right')
+
+plt.show()
+
+
+
+# Creating the model based over the pretrained Xception network
+from tensorflow.keras import applications
+import tensorflow
+from tensorflow.keras import models
+from tensorflow.keras import layers
+from tensorflow.keras import optimizers
+model = models.Sequential()
+
+model.add(tensorflow.keras.layers.UpSampling2D(size=(7,7),input_shape=(32,32,3)))
+
+Xception_model = applications.Xception(weights = "imagenet", include_top=False, input_shape = (224, 224, channels))
+
+for layer in Xception_model.layers:
+    layer.trainable = False
+
+Inputs = layers.Input(shape=(32,32,3))
+x = model(Inputs)
+x = Xception_model(x)
+# TODO: Add Flatten layer + Dense with 128 neurons and relu + Dense with 10 neurons and softmax
+x = layers.Flatten()(x)
+x = layers.Dense(128, activation='relu')(x)
+x = layers.Dropout(0.5)(x)  # Dropout to prevent overfitting
+Outputs = layers.Dense(10, activation='softmax')(x)  # 10 output classes for CIFAR-10
+
+# Create the final model
+final_model = models.Model(inputs=Inputs, outputs=Outputs)
+
+# TODO: Compile the model with the Adam optimizer
+final_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+
+# TODO: Train the model
+history = final_model.fit(x_train, y_train, epochs=5, batch_size=64, validation_split=0.2, verbose=2)
+
+# TODO: Print the resulting accuracy
+final_loss, final_accuracy = final_model.evaluate(x_test, y_test, verbose=2)
+print(f'Test accuracy of the pre-trained model: {final_accuracy * 100:.2f}%')
+
+# TODO: With the model trained, predict some images
+sample_images = x_test[:10]  # Take first 10 images from the test set
+predictions = final_model.predict(sample_images)
+predicted_classes = np.argmax(predictions, axis=1)  # Get class with highest probability
+true_classes = np.argmax(y_test[:10], axis=1)  # Get true labels for comparison
+
+# Display sample images with predictions
+plt.figure(figsize=(12, 6))
+for i in range(10):
+    plt.subplot(2, 5, i + 1)
+    plt.imshow(sample_images[i])
+    plt.title(f"Pred: {predicted_classes[i]}, True: {true_classes[i]}")
+    plt.axis('off')
+plt.show()
+
+# From Scratch Model History (Values you provided)
+from_scratch_history = {
+    'accuracy': [0.3090, 0.6700, 0.7400, 0.7893, 0.8282],
+    'val_accuracy': [0.3590, 0.7066, 0.7548, 0.7762, 0.8003],
+    'loss': [2.0229, 0.9349, 0.7243, 0.5949, 0.4849],
+    'val_loss': [1.8199, 0.8354, 0.6920, 0.6515, 0.5989]
+}
+
+# Pre-trained Model History (Values you provided)
+pretrained_history = {
+    'accuracy': [0.4831, 0.5646, 0.5968, 0.6247, 0.6529],
+    'val_accuracy': [0.6761, 0.7252, 0.7360, 0.7485, 0.7545],
+    'loss': [1.5899, 1.2242, 1.1170, 1.0332, 0.9539],
+    'val_loss': [1.0442, 0.8552, 0.8464, 0.7978, 0.7814]
+}
+
+# Plot the comparison of training and validation accuracy
+plt.figure(figsize=(12, 5))
+# Plot training and validation accuracy
+plt.subplot(1, 2, 1)
+plt.plot(from_scratch_history['accuracy'], label='From Scratch Train Accuracy', linestyle='solid')
+plt.plot(from_scratch_history['val_accuracy'], label='From Scratch Val Accuracy', linestyle='solid')
+plt.plot(pretrained_history['accuracy'], label='Pre-trained Train Accuracy', linestyle='dashed')
+plt.plot(pretrained_history['val_accuracy'], label='Pre-trained Val Accuracy', linestyle='dashed')
+plt.title('Comparison of Train and Validation Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+
+# Plot training and validation loss
+plt.subplot(1, 2, 2)
+plt.plot(from_scratch_history['loss'], label='From Scratch Train Loss', linestyle='solid')
+plt.plot(from_scratch_history['val_loss'], label='From Scratch Val Loss', linestyle='solid')
+plt.plot(pretrained_history['loss'], label='Pre-trained Train Loss', linestyle='dashed')
+plt.plot(pretrained_history['val_loss'], label='Pre-trained Val Loss', linestyle='dashed')
+plt.title('Comparison of Train and Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.show()
